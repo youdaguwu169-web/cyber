@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyber Hacker - Overdrive Edition</title>
+    <style>
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: #000; }
+        body { background: transparent; color: #00e5ff; font-family: 'Courier New', Courier, monospace; text-align: center; margin: 0; padding: 0; height: 100vh; width: 100vw; display: flex; flex-direction: column; justify-content: center; align-items: center; overflow: hidden; }
+
+        #game-screen {
+            background: rgba(0, 10, 20, 0.85); padding: 20px; border-radius: 5px;
+            width: 95%; max-width: 420px; border: 2px solid #00e5ff;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.5); position: relative; box-sizing: border-box;
+            backdrop-filter: blur(4px); min-height: 420px; display: flex; flex-direction: column;
+        }
+
+        .view { display: none; flex-direction: column; height: 100%; }
+        .view.active { display: flex; }
+
+        .description { font-size: 0.8rem; margin-bottom: 10px; min-height: 70px; color: #ff00ff; line-height: 1.3; display: flex; flex-direction: column-reverse; justify-content: flex-start; text-align: left; border-bottom: 1px dashed rgba(255, 0, 255, 0.3); padding-bottom: 5px; }
+
+        .node-container { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .node-box { border: 1px solid #00e5ff; padding: 5px; border-radius: 4px; background: rgba(0,229,255,0.05); }
+        .node-box.highlight { border-color: #ff00ff; box-shadow: 0 0 10px #ff00ff; background: rgba(255,0,255,0.1); }
+        .prob-display { font-size: 1.1rem; font-weight: bold; margin: 5px 0; }
+
+        button { padding: 8px; border: 1px solid #00e5ff; border-radius: 3px; background: rgba(0, 229, 255, 0.2); color: #00e5ff; font-weight: bold; cursor: pointer; font-size: 0.75rem; margin-top: 5px; width: 100%; }
+        button:active { background: #00e5ff; color: #000; }
+
+        /* 特殊ボタン */
+        .overdrive-btn { background: rgba(255, 255, 0, 0.2); border-color: #ffff00; color: #ffff00; margin-bottom: 5px; }
+        .scan-btn { background: rgba(255, 0, 255, 0.1); border-color: #ff00ff; color: #ff00ff; }
+        .retry-btn { background: rgba(255, 0, 0, 0.2); border-color: #ff0000; color: #ff0000; font-size: 1.2rem; padding: 20px; margin-top: 30px; }
+
+        #status { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; background: rgba(0, 20, 40, 0.9); padding: 8px; border-top: 1px solid #00e5ff; margin-top: auto; font-size: 0.75rem; }
+        .shake { animation: shake 0.3s linear; }
+        @keyframes shake { 0% { transform: translate(2px, 2px); } 50% { transform: translate(-2px, -2px); } 100% { transform: translate(0, 0); } }
+    </style>
+</head>
+<body>
+    <canvas id="bg-canvas"></canvas>
+
+    <div id="game-screen">
+        <div id="view-game" class="view active">
+            <h2 style="font-size: 0.9rem; margin: 0 0 10px 0;">> NODE_PENETRATION_MODE</h2>
+            <div id="text" class="description"></div>
+
+            <div class="node-container">
+                <div id="box-α" class="node-box"><div>α</div><div class="prob-display"><span id="p-α">0</span>%</div><button onclick="actionAnalyze('α')">解析</button><button onclick="actionSearch('α')">検索</button></div>
+                <div id="box-β" class="node-box"><div>β</div><div class="prob-display"><span id="p-β">0</span>%</div><button onclick="actionAnalyze('β')">解析</button><button onclick="actionSearch('β')">検索</button></div>
+                <div id="box-γ" class="node-box"><div>γ</div><div class="prob-display"><span id="p-γ">0</span>%</div><button onclick="actionAnalyze('γ')">解析</button><button onclick="actionSearch('γ')">検索</button></div>
+            </div>
+
+            <button class="overdrive-btn" onclick="useOverdrive()">[ OVERDRIVE ] SYNCを消費して全解析+20%</button>
+            <button class="scan-btn" onclick="actionScanAll()">[ SYSTEM SCAN ] 1ターン消費して場所を特定</button>
+            <button style="margin-top:5px;" onclick="tryExit()">メインゲートへ移動</button>
+        </div>
+
+        <div id="view-retry" class="view">
+            <h1 style="color: #ff0000; font-size: 1.8rem; margin-top: 50px;">SYSTEM FAILURE</h1>
+            <p style="color: #ff0000;">接続が遮断されました...</p>
+            <button class="retry-btn" onclick="resetGame()">[ REBOOT ]</button>
+        </div>
+
+        <div id="view-clear" class="view">
+            <h1 style="color: #00e5ff; font-size: 1.8rem; margin-top: 50px;">ACCESS GRANTED</h1>
+            <p>キーの奪取に成功。次サーバーへ転送。</p>
+            <button class="retry-btn" style="border-color:#00e5ff; color:#00e5ff;" onclick="resetGame()">[ NEXT LEVEL ]</button>
+        </div>
+
+        <div id="status">
+            <div style="color:#ff007f">SYNC: <span id="hp-val">3</span></div>
+            <div style="color:#ff9f43">LIMIT: <span id="turn-val">12</span></div>
+            <div style="color:#2ed573; grid-column: span 2;">KEY: <span id="key-val">なし</span></div>
+        </div>
+    </div>
+
+<script>
+    /* --- マトリックス背景 --- */
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    const characters = "0123456789ABCDEF";
+    const fontSize = 16;
+    const drops = Array(Math.floor(canvas.width / fontSize)).fill(1);
+    function draw() {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.05)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#003333"; ctx.font = fontSize + "px monospace";
+        for (let i = 0; i < drops.length; i++) {
+            const text = characters.charAt(Math.floor(Math.random() * characters.length));
+            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        }
+    }
+    setInterval(draw, 50);
+
+    /* --- ゲームロジック --- */
+    let sync, turns, prog, keyLocation, hasKey;
+
+    function resetGame() {
+        sync = 3; turns = 12; hasKey = false;
+        prog = { 'α': 0, 'β': 0, 'γ': 0 };
+        keyLocation = ['α', 'β', 'γ'][Math.floor(Math.random() * 3)];
+        document.getElementById('text').innerHTML = "";
+        document.querySelectorAll('.node-box').forEach(b => b.classList.remove('highlight'));
+        switchView('view-game');
+        updateStatus();
+        addLog("> ネットワークに侵入... ターゲットを確認せよ。");
+    }
+
+    function switchView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+    }
+
+    function addLog(msg) {
+        const entry = document.createElement('div');
+        entry.textContent = msg;
+        const textEl = document.getElementById('text');
+        textEl.prepend(entry);
+        if (textEl.childNodes.length > 4) textEl.removeChild(textEl.lastChild);
+    }
+
+    function useOverdrive() {
+        if (sync > 1) {
+            sync--;
+            prog['α'] = Math.min(100, prog['α'] + 20);
+            prog['β'] = Math.min(100, prog['β'] + 20);
+            prog['γ'] = Math.min(100, prog['γ'] + 20);
+            shake();
+            addLog("> [OVERDRIVE] 精神同期を加速！全解析+20%。");
+            updateStatus();
+        } else {
+            addLog("> [ERROR] SYNC不足。オーバードライブ不可。");
+        }
+    }
+
+    function actionAnalyze(id) {
+        turns--;
+        if (Math.random() < 0.7) {
+            const add = Math.floor(Math.random() * 8) + 3; // 難易度調整: 3~10%
+            prog[id] = Math.min(100, prog[id] + add);
+            addLog(`> [OK] ${id}解析: +${add}%`);
+        } else {
+            const loss = Math.floor(Math.random() * 5) + 3;
+            prog[id] = Math.max(0, prog[id] - loss);
+            addLog(`> [ERR] ${id}データ破損: -${loss}%`);
+            if(Math.random() < 0.2) { sync--; shake(); addLog(`> [WARN] SYNC低下を検知。`); }
+        }
+        updateStatus();
+    }
+
+    function actionSearch(id) {
+        turns--;
+        if (id === keyLocation && Math.random() < (prog[id]/100)) {
+            hasKey = true;
+            addLog(`> [SUCCESS] キー抽出完了。ゲートを開け。`);
+        } else {
+            addLog(`> [MISS] ${id}にデータなし。`);
+            if (Math.random() < 0.3) { sync--; shake(); addLog(`> [ALERT] セキュリティ反応！`); }
+        }
+        updateStatus();
+    }
+
+    function actionScanAll() {
+        turns--;
+        addLog("> 周辺をスキャン中...");
+        document.querySelectorAll('.node-box').forEach(b => b.classList.remove('highlight'));
+        let target = (Math.random() < 0.8) ? keyLocation : ['α', 'β', 'γ'][Math.floor(Math.random() * 3)];
+        setTimeout(() => {
+            document.getElementById(`box-${target}`).classList.add('highlight');
+            addLog(`> [SCAN] ${target}にキーの痕跡。`);
+            updateStatus();
+        }, 400);
+    }
+
+    function tryExit() {
+        if (hasKey) switchView('view-clear');
+        else addLog("> [DENIED] キーが必要です。");
+    }
+
+    function updateStatus() {
+        document.getElementById('hp-val').textContent = sync;
+        document.getElementById('turn-val').textContent = turns;
+        document.getElementById('key-val').textContent = hasKey ? "保有" : "なし";
+        ['α', 'β', 'γ'].forEach(id => document.getElementById(`p-${id}`).textContent = prog[id]);
+        if (sync <= 0 || (turns <= 0 && !hasKey)) setTimeout(() => switchView('view-retry'), 300);
+    }
+
+    function shake() {
+        const s = document.getElementById('game-screen');
+        s.classList.remove('shake'); void s.offsetWidth; s.classList.add('shake');
+    }
+
+    resetGame();
+</script>
+</body>
+</html>
